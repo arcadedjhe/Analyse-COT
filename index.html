@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#0a0a0f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="COT NQ">
+<meta name="description" content="Commitment of Traders — NQ E-mini NASDAQ-100 Dashboard">
+<title>COT NQ</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #0a0a0f;
+  --bg2: #111118;
+  --bg3: #1a1a24;
+  --bg4: #22222e;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.12);
+  --text: #e8e8f0;
+  --text2: #8888a0;
+  --text3: #55556a;
+  --green: #3ddc84;
+  --green-bg: rgba(61,220,132,0.1);
+  --red: #ff5f5f;
+  --red-bg: rgba(255,95,95,0.1);
+  --amber: #f0a030;
+  --amber-bg: rgba(240,160,48,0.1);
+  --blue: #4da8f0;
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 14px; line-height: 1.5; }
+body { min-height: 100vh; max-width: 640px; margin: 0 auto; padding: 0 0 80px; }
+
+/* Header */
+.header { padding: 20px 16px 12px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: rgba(10,10,15,0.92); backdrop-filter: blur(12px); z-index: 100; }
+.header-top { display: flex; align-items: flex-start; justify-content: space-between; }
+.header-label { font-size: 10px; color: var(--text3); letter-spacing: 0.08em; text-transform: uppercase; font-family: 'DM Mono', monospace; margin-bottom: 2px; }
+.header-title { font-size: 20px; font-weight: 500; letter-spacing: -0.02em; }
+.header-actions { display: flex; gap: 8px; align-items: center; }
+.btn { padding: 6px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border2); background: transparent; color: var(--text2); font-size: 12px; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: all 0.15s; }
+.btn:hover { background: var(--bg3); color: var(--text); }
+.btn-primary { background: var(--blue); border-color: var(--blue); color: #000; font-weight: 500; }
+.btn-primary:hover { opacity: 0.85; }
+.data-info { font-size: 10px; color: var(--text3); font-family: 'DM Mono', monospace; margin-top: 8px; }
+
+/* Upload */
+.upload-screen { padding: 24px 16px; }
+.upload-zone { border: 1.5px dashed var(--border2); border-radius: var(--radius); padding: 40px 24px; text-align: center; cursor: pointer; transition: all 0.2s; }
+.upload-zone:hover, .upload-zone.drag-over { border-color: var(--blue); background: rgba(77,168,240,0.04); }
+.upload-icon { font-size: 32px; margin-bottom: 12px; }
+.upload-title { font-size: 16px; font-weight: 500; margin-bottom: 6px; }
+.upload-sub { font-size: 13px; color: var(--text2); margin-bottom: 4px; }
+.upload-hint { font-size: 11px; color: var(--text3); font-family: 'DM Mono', monospace; }
+.upload-err { color: var(--red); font-size: 12px; margin-top: 12px; padding: 10px 14px; background: var(--red-bg); border-radius: var(--radius-sm); display: none; }
+
+.how-to { margin-top: 24px; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+.how-to-title { font-size: 11px; color: var(--text3); letter-spacing: 0.06em; text-transform: uppercase; font-family: 'DM Mono', monospace; margin-bottom: 12px; }
+.step { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.step:last-child { border-bottom: none; }
+.step-num { width: 20px; height: 20px; border-radius: 50%; background: var(--bg4); border: 1px solid var(--border2); font-size: 10px; color: var(--text3); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-family: 'DM Mono', monospace; margin-top: 1px; }
+.step-text { font-size: 12px; color: var(--text2); line-height: 1.6; }
+.step-text code { font-family: 'DM Mono', monospace; background: var(--bg4); padding: 1px 5px; border-radius: 4px; font-size: 11px; color: var(--blue); }
+
+/* Dashboard */
+.dash { padding: 0 16px; display: none; }
+
+/* Bias card */
+.bias-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin: 12px 0; position: relative; overflow: hidden; }
+.bias-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
+.bias-card.bull::before { background: var(--green); }
+.bias-card.bear::before { background: var(--red); }
+.bias-card.neutral::before { background: var(--text3); }
+.bias-label { font-size: 10px; color: var(--text3); letter-spacing: 0.08em; text-transform: uppercase; font-family: 'DM Mono', monospace; margin-bottom: 6px; }
+.bias-value { font-size: 28px; font-weight: 500; letter-spacing: -0.03em; margin-bottom: 6px; }
+.bias-value.bull { color: var(--green); }
+.bias-value.bear { color: var(--red); }
+.bias-value.neutral { color: var(--text2); }
+.bias-desc { font-size: 12px; color: var(--text2); line-height: 1.6; }
+
+/* Metrics grid */
+.metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.metric { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+.metric-label { font-size: 10px; color: var(--text3); letter-spacing: 0.06em; text-transform: uppercase; font-family: 'DM Mono', monospace; margin-bottom: 6px; }
+.metric-value { font-size: 24px; font-weight: 500; letter-spacing: -0.02em; margin-bottom: 4px; }
+.metric-sub { font-size: 11px; color: var(--text2); font-family: 'DM Mono', monospace; }
+.metric-sub span { margin-right: 8px; }
+.green { color: var(--green); }
+.red { color: var(--red); }
+.amber { color: var(--amber); }
+
+/* Section */
+.section { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
+.section-title { font-size: 10px; color: var(--text3); letter-spacing: 0.08em; text-transform: uppercase; font-family: 'DM Mono', monospace; margin-bottom: 14px; }
+
+/* Chart */
+.chart-controls { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+.period-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text2); font-size: 11px; font-family: 'DM Mono', monospace; cursor: pointer; transition: all 0.15s; }
+.period-btn.active { background: var(--bg4); border-color: var(--border2); color: var(--text); }
+.chart-legend { display: flex; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text2); }
+.legend-line { width: 16px; height: 2px; border-radius: 1px; }
+.chart-wrap { position: relative; width: 100%; height: 220px; }
+
+/* Signals */
+.signal-row { display: flex; align-items: flex-start; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); gap: 10px; }
+.signal-row:last-child { border-bottom: none; }
+.signal-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
+.signal-body { flex: 1; }
+.signal-name { font-size: 13px; font-weight: 500; margin-bottom: 2px; }
+.signal-desc { font-size: 11px; color: var(--text2); line-height: 1.5; }
+.tag { display: inline-block; padding: 2px 8px; border-radius: 5px; font-size: 10px; font-weight: 500; font-family: 'DM Mono', monospace; letter-spacing: 0.04em; white-space: nowrap; }
+.tag-green { background: var(--green-bg); color: var(--green); }
+.tag-red { background: var(--red-bg); color: var(--red); }
+.tag-amber { background: var(--amber-bg); color: var(--amber); }
+.tag-neutral { background: var(--bg4); color: var(--text2); }
+
+/* OI signal rows */
+.oi-row { display: flex; align-items: flex-start; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); gap: 10px; }
+.oi-row:last-child { border-bottom: none; }
+.oi-row.dim { opacity: 0.28; }
+.oi-text { flex: 1; }
+.oi-name { font-size: 12px; font-weight: 500; margin-bottom: 1px; }
+.oi-desc { font-size: 11px; color: var(--text2); }
+
+/* History table */
+.hist-table { width: 100%; border-collapse: collapse; font-size: 12px; font-family: 'DM Mono', monospace; }
+.hist-table th { color: var(--text3); font-weight: 400; text-align: right; padding: 4px 6px; border-bottom: 1px solid var(--border); font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; }
+.hist-table th:first-child { text-align: left; }
+.hist-table td { padding: 6px 6px; text-align: right; border-bottom: 1px solid var(--border); color: var(--text2); }
+.hist-table td:first-child { text-align: left; color: var(--text3); }
+.hist-table tr:last-child td { border-bottom: none; }
+
+/* Note */
+.note { font-size: 11px; color: var(--text3); margin-top: 10px; font-style: italic; }
+
+/* Bottom nav placeholder */
+.bottom-bar { position: fixed; bottom: 0; left: 0; right: 0; max-width: 640px; margin: 0 auto; background: rgba(10,10,15,0.95); backdrop-filter: blur(12px); border-top: 1px solid var(--border); padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; z-index: 100; }
+.bottom-info { font-size: 10px; color: var(--text3); font-family: 'DM Mono', monospace; }
+
+@media (max-width: 400px) {
+  .metric-value { font-size: 20px; }
+  .bias-value { font-size: 24px; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <div>
+      <div class="header-label">Commitment of Traders</div>
+      <div class="header-title">NQ — E-mini NASDAQ-100</div>
+    </div>
+    <div class="header-actions">
+      <button class="btn" id="btn-reload" style="display:none" onclick="showUpload()">Changer</button>
+    </div>
+  </div>
+  <div class="data-info" id="data-info"></div>
+</div>
+
+<!-- Upload screen -->
+<div class="upload-screen" id="upload-screen">
+  <div class="upload-zone" id="upload-zone" onclick="document.getElementById('fi').click()">
+    <input type="file" id="fi" accept=".csv,.txt,.xls,.xlsx" style="display:none">
+    <div class="upload-icon">📂</div>
+    <div class="upload-title">Charger le fichier COT</div>
+    <div class="upload-sub">CSV extrait ou fichier TFF CFTC complet</div>
+    <div class="upload-hint" style="margin-top:8px;">NQ_COT_2025_2026.csv</div>
+  </div>
+  <div class="upload-err" id="upload-err"></div>
+
+  <div class="how-to">
+    <div class="how-to-title">Comment obtenir les données</div>
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-text">Téléchargez le zip depuis la CFTC :<br><code>cftc.gov/files/dea/history/fut_fin_xls_2026.zip</code></div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-text">Décompressez et glissez le fichier <code>.xls</code> ou utilisez le CSV exporté depuis Claude</div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-text">Mise à jour chaque vendredi soir — données arrêtées au mardi précédent</div>
+    </div>
+  </div>
+</div>
+
+<!-- Dashboard -->
+<div class="dash" id="dash">
+
+  <div class="bias-card" id="bias-card">
+    <div class="bias-label">Biais hebdomadaire COT</div>
+    <div class="bias-value" id="bias-val"></div>
+    <div class="bias-desc" id="bias-desc"></div>
+  </div>
+
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-label">Asset managers</div>
+      <div class="metric-value" id="am-v"></div>
+      <div class="metric-sub" id="am-c"></div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Leveraged funds</div>
+      <div class="metric-value" id="lf-v"></div>
+      <div class="metric-sub" id="lf-c"></div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Small specs long</div>
+      <div class="metric-value" id="sm-v"></div>
+      <div class="metric-sub" id="sm-c"></div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Open interest</div>
+      <div class="metric-value" id="oi-v"></div>
+      <div class="metric-sub" id="oi-c"></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Positions nettes</div>
+    <div class="chart-controls" id="period-btns">
+      <button class="period-btn" data-wk="13" onclick="setPeriod(13)">13 sem.</button>
+      <button class="period-btn active" data-wk="26" onclick="setPeriod(26)">26 sem.</button>
+      <button class="period-btn" data-wk="52" onclick="setPeriod(52)">52 sem.</button>
+      <button class="period-btn" data-wk="999" onclick="setPeriod(999)">Tout</button>
+    </div>
+    <div class="chart-legend">
+      <div class="legend-item"><div class="legend-line" style="background:#4da8f0"></div>Asset mgr</div>
+      <div class="legend-item"><div class="legend-line" style="background:#f0a030;border-top:2px dashed #f0a030;height:0"></div>Lev funds</div>
+      <div class="legend-item"><div class="legend-line" style="background:#55556a"></div>Small specs</div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="nc" role="img" aria-label="Positions nettes COT NQ par catégorie d'acteur"></canvas>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Signaux détectés</div>
+    <div id="sigs"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Signal open interest</div>
+    <div id="oi-sig"></div>
+    <p class="note">Confirmation prix requise (MM18/40 en daily)</p>
+  </div>
+
+  <div class="section">
+    <div class="section-title">8 dernières semaines</div>
+    <div style="overflow-x:auto"><table class="hist-table" id="hist-table"></table></div>
+  </div>
+
+</div>
+
+<div class="bottom-bar" id="bottom-bar" style="display:none">
+  <div class="bottom-info" id="bottom-date"></div>
+  <button class="btn btn-primary" onclick="document.getElementById('fi').click()">+ Fichier</button>
+</div>
+
+<script>
+let allData = [];
+let chartInst = null;
+let activePeriod = 26;
+
+// ── Utils ──────────────────────────────────────────────────────
+function fmtK(n) { return (n >= 0 ? '+' : '') + Math.round(n / 1000) + 'k'; }
+function pct(n) { return Math.round(n * 100) + '%'; }
+function colorClass(n) { return n >= 0 ? 'green' : 'red'; }
+
+function parseDate(raw) {
+  if (!raw || raw === 'nan') return null;
+  raw = String(raw).trim();
+  if (/^\d{6}$/.test(raw))
+    return new Date('20' + raw.slice(0,2) + '-' + raw.slice(2,4) + '-' + raw.slice(4,6) + 'T00:00:00');
+  const d = new Date(raw);
+  return isNaN(d) ? null : d;
+}
+
+function parseCSV(text) {
+  const lines = text.replace(/\r/g, '').split('\n');
+  if (lines.length < 2) return [];
+  const hdrs = parseRow(lines[0]);
+  return lines.slice(1).filter(l => l.trim()).map(l => {
+    const vals = parseRow(l);
+    const r = {};
+    hdrs.forEach((h, i) => r[h.trim().replace(/"/g, '')] = (vals[i] || '').trim().replace(/"/g, ''));
+    return r;
+  });
+}
+
+function parseRow(line) {
+  const out = []; let cur = ''; let q = false;
+  for (const ch of line) {
+    if (ch === '"') q = !q;
+    else if (ch === ',' && !q) { out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur); return out;
+}
+
+function getInt(row, ...keys) {
+  for (const k of keys) {
+    const v = row[k];
+    if (v !== undefined && v !== '' && v !== 'nan') {
+      const n = parseInt(String(v).replace(/,/g, ''));
+      if (!isNaN(n)) return n;
+    }
+  }
+  return 0;
+}
+
+function processRows(rows) {
+  const nq = rows.filter(r => {
+    const code = String(r['CFTC_Contract_Market_Code'] || '').trim();
+    const name = (r['Market_and_Exchange_Names'] || '').toUpperCase();
+    return code === '209742' || (name.includes('NASDAQ') && name.includes('MINI') && !name.includes('MICRO'));
+  });
+  if (!nq.length) return null;
+  return nq.map(r => {
+    const dateRaw = r['Report_Date_as_MM_DD_YYYY'] || r['Report_Date_as_YYYY-MM-DD'] || r['As_of_Date_In_Form_YYMMDD'] || r['As_of_Date_in_Form_YYMMDD'] || '';
+    const date = parseDate(dateRaw);
+    if (!date) return null;
+    const oi  = getInt(r, 'Open_Interest_All');
+    const amL = getInt(r, 'Asset_Mgr_Positions_Long_All');
+    const amS = getInt(r, 'Asset_Mgr_Positions_Short_All');
+    const lfL = getInt(r, 'Lev_Money_Positions_Long_All');
+    const lfS = getInt(r, 'Lev_Money_Positions_Short_All');
+    const smL = getInt(r, 'NonRept_Positions_Long_All');
+    const smS = getInt(r, 'NonRept_Positions_Short_All');
+    return { date, dateStr: date.toLocaleDateString('fr-FR', {day:'2-digit',month:'2-digit',year:'2-digit'}), oi, amNet:amL-amS, amL, amS, lfNet:lfL-lfS, lfL, lfS, smNet:smL-smS, smL, smS };
+  }).filter(Boolean).sort((a, b) => a.date - b.date);
+}
+
+// ── Signals ────────────────────────────────────────────────────
+function computeSignals(data) {
+  if (data.length < 3) return null;
+  const last = data[data.length - 1];
+  const prev = data[data.length - 2];
+  const p4   = data[Math.max(0, data.length - 5)];
+  const amTrend4 = last.amNet - p4.amNet, amWk = last.amNet - prev.amNet;
+  const lfTrend4 = last.lfNet - p4.lfNet, lfWk = last.lfNet - prev.lfNet;
+  const smRatio  = (last.smL + last.smS) > 0 ? last.smL / (last.smL + last.smS) : 0.5;
+  const smExtreme = smRatio > 0.72, smLow = smRatio < 0.35;
+  const oiWk = last.oi - prev.oi;
+  const amNets = data.map(d => d.amNet);
+  const amMean = amNets.reduce((a, b) => a + b, 0) / amNets.length;
+  const amStd  = Math.sqrt(amNets.reduce((a, b) => a + (b - amMean) ** 2, 0) / amNets.length);
+  const amZ = amStd > 0 ? (last.amNet - amMean) / amStd : 0;
+  const amExtreme = Math.abs(amZ) > 1.5;
+  let divType = 'none';
+  if (amTrend4 > 0 && lfTrend4 < 0) divType = 'am_buy_lf_sell';
+  else if (amTrend4 < 0 && lfTrend4 > 0) divType = 'am_sell_lf_buy';
+  else if (amTrend4 > 0 && lfTrend4 > 0) divType = 'both_buy';
+  else if (amTrend4 < 0 && lfTrend4 < 0) divType = 'both_sell';
+  let bull = 0, bear = 0;
+  if (amTrend4 > 0) bull += 2; else bear += 2;
+  if (amWk > 0) bull += 1; else bear += 1;
+  if (lfTrend4 > 0) bull += 0.5; else bear += 0.5;
+  if (smExtreme) bear += 2;
+  if (divType === 'am_buy_lf_sell') bull += 1;
+  if (divType === 'am_sell_lf_buy') bear += 2;
+  if (oiWk > 0 && amWk > 0) bull += 0.5;
+  if (oiWk < 0 && amWk < 0) bear += 0.5;
+  const bias = bull > bear + 1.5 ? 'HAUSSIER' : bear > bull + 1.5 ? 'BAISSIER' : 'NEUTRE';
+  return { bias, amTrend4, amWk, lfTrend4, lfWk, smRatio, smExtreme, smLow, oiWk, divType, amZ, amExtreme, last, prev };
+}
+
+// ── Render ─────────────────────────────────────────────────────
+function renderDash() {
+  const sig = computeSignals(allData);
+  if (!sig) return;
+  const { last, bias, amTrend4, amWk, lfTrend4, lfWk, smRatio, smExtreme, smLow, oiWk, divType, amZ, amExtreme } = sig;
+
+  document.getElementById('data-info').textContent = allData.length + ' semaines · dernière : ' + last.dateStr;
+  document.getElementById('bottom-date').textContent = 'MAJ : ' + last.dateStr;
+
+  // Bias
+  const biasEl = document.getElementById('bias-val');
+  const biasCard = document.getElementById('bias-card');
+  const cls = bias === 'HAUSSIER' ? 'bull' : bias === 'BAISSIER' ? 'bear' : 'neutral';
+  biasEl.textContent = bias;
+  biasEl.className = 'bias-value ' + cls;
+  biasCard.className = 'bias-card ' + cls;
+  const descs = [];
+  if (divType === 'am_buy_lf_sell') descs.push('AM accumulent, LF réduisent — structure solide');
+  else if (divType === 'am_sell_lf_buy') descs.push('AM distribuent, LF poussent seuls — signal de bulle');
+  else if (divType === 'both_buy') descs.push('AM et LF haussiers simultanément — momentum confirmé');
+  else if (divType === 'both_sell') descs.push('AM et LF baissiers — pression vendeuse généralisée');
+  if (smExtreme) descs.push('Small specs surchargés — signal contrarien baissier');
+  if (amExtreme) descs.push('AM en zone extrême (z-score ' + amZ.toFixed(1) + ')');
+  document.getElementById('bias-desc').textContent = descs.join(' · ') || 'Pas de signal fort détecté cette semaine';
+
+  // Metrics
+  const amColor = colorClass(last.amNet);
+  const amWkColor = colorClass(amWk);
+  document.getElementById('am-v').textContent = fmtK(last.amNet);
+  document.getElementById('am-v').className = 'metric-value ' + amColor;
+  document.getElementById('am-c').innerHTML = `<span class="${amWkColor}">${fmtK(amWk)} sem.</span> <span>${fmtK(amTrend4)} 4s.</span>`;
+
+  const lfColor = colorClass(last.lfNet);
+  const lfWkColor = colorClass(lfWk);
+  document.getElementById('lf-v').textContent = fmtK(last.lfNet);
+  document.getElementById('lf-v').className = 'metric-value ' + lfColor;
+  document.getElementById('lf-c').innerHTML = `<span class="${lfWkColor}">${fmtK(lfWk)} sem.</span> <span>${fmtK(lfTrend4)} 4s.</span>`;
+
+  const smColor = smExtreme ? 'red' : smLow ? 'green' : '';
+  document.getElementById('sm-v').textContent = pct(smRatio);
+  document.getElementById('sm-v').className = 'metric-value ' + smColor;
+  document.getElementById('sm-c').textContent = smExtreme ? '⚠ Extrême — contrarien baissier' : smLow ? '↓ Capitulation — contrarien haussier' : 'Zone neutre';
+  document.getElementById('sm-c').className = 'metric-sub ' + smColor;
+
+  const oiColor = colorClass(oiWk);
+  document.getElementById('oi-v').textContent = Math.round(last.oi / 1000) + 'k';
+  document.getElementById('oi-v').className = 'metric-value';
+  document.getElementById('oi-c').innerHTML = `<span class="${oiColor}">${fmtK(oiWk)} sem.</span>`;
+
+  renderSignals(sig);
+  renderOI(sig);
+  renderHistory();
+  renderChart();
+
+  document.getElementById('dash').style.display = 'block';
+  document.getElementById('upload-screen').style.display = 'none';
+  document.getElementById('btn-reload').style.display = 'block';
+  document.getElementById('bottom-bar').style.display = 'flex';
+
+  // Persist to localStorage
+  try { localStorage.setItem('cot_nq_data', JSON.stringify(allData.map(d => ({...d, date: d.date.toISOString()})))); } catch(e) {}
+}
+
+function renderSignals(sig) {
+  const { divType, smExtreme, smLow, smRatio, amZ, amExtreme } = sig;
+  const sigs = [];
+  if (divType === 'am_buy_lf_sell') sigs.push({ color: 'green', name: 'Divergence haussière', desc: 'AM accumulent pendant que LF réduisent. Les institutionnels long terme maintiennent leur conviction.', tag: 'haussier', tagCls: 'tag-green' });
+  else if (divType === 'am_sell_lf_buy') sigs.push({ color: 'red', name: 'Bulle spéculative', desc: 'LF poussent la hausse seuls. AM distribuent en silence. Hausse sans fondation solide.', tag: 'baissier', tagCls: 'tag-red' });
+  else if (divType === 'both_buy') sigs.push({ color: 'green', name: 'Momentum confirmé', desc: 'AM et LF haussiers simultanément. Double validation du mouvement haussier.', tag: 'haussier', tagCls: 'tag-green' });
+  else if (divType === 'both_sell') sigs.push({ color: 'red', name: 'Pression vendeuse', desc: 'AM et LF baissiers simultanément. Pression institutionnelle à la baisse.', tag: 'baissier', tagCls: 'tag-red' });
+  if (smExtreme) sigs.push({ color: 'red', name: 'Small specs extrême', desc: `Ratio long : ${pct(smRatio)}. Le retail est massivement positionné — contrepartie idéale pour les institutionnels pour sortir.`, tag: 'contrarien ↓', tagCls: 'tag-red' });
+  else if (smLow) sigs.push({ color: 'green', name: 'Capitulation retail', desc: `Ratio long : ${pct(smRatio)}. Le retail a jeté l'éponge — signal contrarien haussier potentiel.`, tag: 'contrarien ↑', tagCls: 'tag-green' });
+  if (amExtreme) sigs.push({ color: 'amber', name: 'Élastique historique', desc: `AM à z-score ${amZ.toFixed(1)} — position en zone d'extrême tension. Mean reversion statistiquement probable.`, tag: 'contexte', tagCls: 'tag-amber' });
+  if (!sigs.length) sigs.push({ color: '', name: 'Pas de signal fort', desc: 'Aucune anomalie statistique détectée cette semaine. Marché en configuration normale.', tag: 'neutre', tagCls: 'tag-neutral' });
+
+  document.getElementById('sigs').innerHTML = sigs.map(s => `
+    <div class="signal-row">
+      <div class="signal-dot" style="background:${s.color==='green'?'var(--green)':s.color==='red'?'var(--red)':s.color==='amber'?'var(--amber)':'var(--text3)'}"></div>
+      <div class="signal-body">
+        <div class="signal-name">${s.name}</div>
+        <div class="signal-desc">${s.desc}</div>
+      </div>
+      <span class="tag ${s.tagCls}">${s.tag}</span>
+    </div>`).join('');
+}
+
+function renderOI(sig) {
+  const { oiWk } = sig;
+  const oiUp = oiWk >= 0;
+  const rows = [
+    { oiUp:true,  name:'Prix ↑ + OI ↑', desc:'Tendance saine — argent frais qui entre', bull:true },
+    { oiUp:false, name:'Prix ↑ + OI ↓', desc:'Short covering — hausse fragile sans acheteurs', bull:false },
+    { oiUp:true,  name:'Prix ↓ + OI ↑', desc:'Pression baissière intense — vendeurs agressifs', bull:false },
+    { oiUp:false, name:'Prix ↓ + OI ↓', desc:'Long liquidation — souvent fin de baisse', bull:true },
+  ];
+  document.getElementById('oi-sig').innerHTML = `
+    <div class="oi-row">
+      <div class="oi-text"><div class="oi-name">Variation cette semaine</div><div class="oi-desc">${oiWk >= 0 ? '+' : ''}${Math.round(oiWk/1000)}k contrats</div></div>
+      <span class="tag ${oiUp?'tag-green':'tag-red'}">${oiUp?'hausse':'baisse'}</span>
+    </div>
+    ${rows.map(r => `
+    <div class="oi-row ${r.oiUp===oiUp?'':'dim'}">
+      <div class="oi-text">
+        <div class="oi-name" style="font-weight:${r.oiUp===oiUp?500:400}">${r.name}</div>
+        <div class="oi-desc">${r.desc}</div>
+      </div>
+      ${r.oiUp===oiUp ? `<span class="tag ${r.bull?'tag-green':'tag-red'}">${r.bull?'haussier':'baissier'}</span>` : ''}
+    </div>`).join('')}`;
+}
+
+function renderHistory() {
+  const recent = allData.slice(-8).reverse();
+  const rows = recent.map((d, i) => {
+    const prev = allData[allData.length - 1 - i - 1];
+    const amC = prev ? (d.amNet > prev.amNet ? 'green' : d.amNet < prev.amNet ? 'red' : '') : '';
+    const lfC = prev ? (d.lfNet > prev.lfNet ? 'green' : d.lfNet < prev.lfNet ? 'red' : '') : '';
+    const dAm = prev ? fmtK(d.amNet - prev.amNet) : '—';
+    const dAmC = prev ? (d.amNet > prev.amNet ? 'green' : 'red') : '';
+    const smR = (d.smL + d.smS) > 0 ? Math.round(d.smL / (d.smL + d.smS) * 100) : '—';
+    const smC = smR > 72 ? 'red' : smR < 35 ? 'green' : '';
+    return `<tr>
+      <td>${d.dateStr}</td>
+      <td class="${amC}">${fmtK(d.amNet)}</td>
+      <td class="${dAmC}">${dAm}</td>
+      <td class="${lfC}">${fmtK(d.lfNet)}</td>
+      <td class="${smC}">${smR}%</td>
+      <td>${Math.round(d.oi/1000)}k</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('hist-table').innerHTML = `
+    <tr><th>Date</th><th>AM net</th><th>Δ AM</th><th>LF net</th><th>SM%</th><th>OI</th></tr>
+    ${rows}`;
+}
+
+function setPeriod(wk) {
+  activePeriod = wk;
+  document.querySelectorAll('.period-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.wk) === wk);
+  });
+  renderChart();
+}
+
+function renderChart() {
+  const slice = activePeriod >= 999 ? allData : allData.slice(-activePeriod);
+  if (chartInst) { chartInst.destroy(); chartInst = null; }
+  chartInst = new Chart(document.getElementById('nc'), {
+    type: 'line',
+    data: {
+      labels: slice.map(d => d.dateStr),
+      datasets: [
+        { label:'Asset Mgr', data:slice.map(d => Math.round(d.amNet/1000)), borderColor:'#4da8f0', backgroundColor:'transparent', borderWidth:2, pointRadius:2, pointHoverRadius:4, tension:0.3 },
+        { label:'Lev Funds', data:slice.map(d => Math.round(d.lfNet/1000)), borderColor:'#f0a030', backgroundColor:'transparent', borderWidth:2, pointRadius:2, pointHoverRadius:4, tension:0.3, borderDash:[5,3] },
+        { label:'Small Specs', data:slice.map(d => Math.round(d.smNet/1000)), borderColor:'#55556a', backgroundColor:'transparent', borderWidth:1.5, pointRadius:1, pointHoverRadius:3, tension:0.3, borderDash:[2,3] },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:'index', intersect:false },
+      plugins:{ legend:{display:false}, tooltip:{ backgroundColor:'#1a1a24', borderColor:'rgba(255,255,255,0.1)', borderWidth:1, titleColor:'#8888a0', bodyColor:'#e8e8f0', callbacks:{ label: ctx => ctx.dataset.label + ': ' + ctx.raw + 'k' } } },
+      scales:{
+        x:{ grid:{display:false}, ticks:{ font:{size:10,family:"'DM Mono', monospace"}, maxTicksLimit:6, maxRotation:0, color:'#55556a' }, border:{display:false} },
+        y:{ grid:{ color:'rgba(255,255,255,0.04)' }, ticks:{ font:{size:10,family:"'DM Mono', monospace"}, color:'#55556a', callback:v=>v+'k' }, border:{display:false} }
+      }
+    }
+  });
+}
+
+// ── Load ───────────────────────────────────────────────────────
+function loadText(text) {
+  try {
+    const rows = parseCSV(text);
+    const data = processRows(rows);
+    if (!data || !data.length) {
+      showErr('NQ introuvable — vérifiez que c\'est bien le fichier TFF CFTC (NASDAQ MINI / code 209742)');
+      return;
+    }
+    allData = data;
+    hideErr();
+    renderDash();
+  } catch(ex) {
+    showErr('Erreur de parsing : ' + ex.message);
+  }
+}
+
+function showErr(msg) { const e = document.getElementById('upload-err'); e.textContent = msg; e.style.display = 'block'; }
+function hideErr() { document.getElementById('upload-err').style.display = 'none'; }
+
+function showUpload() {
+  document.getElementById('dash').style.display = 'none';
+  document.getElementById('upload-screen').style.display = 'block';
+  document.getElementById('bottom-bar').style.display = 'none';
+  document.getElementById('btn-reload').style.display = 'none';
+}
+
+document.getElementById('fi').addEventListener('change', function(e) {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader(); r.onload = ev => loadText(ev.target.result); r.readAsText(f);
+});
+
+const uz = document.getElementById('upload-zone');
+uz.addEventListener('dragover', e => { e.preventDefault(); uz.classList.add('drag-over'); });
+uz.addEventListener('dragleave', () => uz.classList.remove('drag-over'));
+uz.addEventListener('drop', e => {
+  e.preventDefault(); uz.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0]; if (!f) return;
+  const r = new FileReader(); r.onload = ev => loadText(ev.target.result); r.readAsText(f);
+});
+
+// ── Restore from localStorage ──────────────────────────────────
+try {
+  const saved = localStorage.getItem('cot_nq_data');
+  if (saved) {
+    const parsed = JSON.parse(saved);
+    allData = parsed.map(d => ({...d, date: new Date(d.date)}));
+    if (allData.length) renderDash();
+  }
+} catch(e) {}
+
+// ── Service Worker ─────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
