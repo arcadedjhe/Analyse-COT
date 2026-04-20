@@ -1,37 +1,39 @@
-name: Update COT Data
+name: Update NQ Data
 
 on:
   schedule:
-    # Every Friday at 22:00 UTC (midnight Paris time)
+    - cron: '30 22 * * 1-5'
     - cron: '0 22 * * 5'
   workflow_dispatch:
-    # Allow manual trigger from GitHub UI
 
 jobs:
   update:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Install dependencies
-        run: pip install requests xlrd pandas openpyxl
-
-      - name: Fetch and parse COT data
-        run: python scripts/fetch_cot.py
-
-      - name: Commit data if changed
+        run: pip install requests xlrd pandas openpyxl yfinance
+      - name: Fetch price data (always)
+        run: python scripts/fetch_price.py
+      - name: Fetch COT data (Fridays + manual)
+        run: |
+          DAY=$(date +%u)
+          if [ "$DAY" = "5" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            python scripts/fetch_cot.py
+          else
+            echo "Skipping COT (not Friday)"
+          fi
+      - name: Commit if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/nq_cot.json
-          git diff --staged --quiet || git commit -m "Update COT NQ data $(date +%Y-%m-%d)"
+          git add data/
+          git diff --staged --quiet || git commit -m "Update NQ data $(date +%Y-%m-%d)"
           git push
