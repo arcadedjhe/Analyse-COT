@@ -385,6 +385,8 @@ function renderChart(){
   // COT chart - aligned on price dates
   if(chartInst){chartInst.destroy();chartInst=null;}
   var cotOnPrice=buildCOTOnPriceDates(priceSlice,cotSlice);
+  // expose for pointRadius callbacks
+  window._cotOnPrice=cotOnPrice;
   var useLables=priceSlice.length?labels:cotSlice.map(function(d){return d.dateStr;});
   var amD=priceSlice.length?cotOnPrice.amArr:cotSlice.map(function(d){return Math.round(d.amNet/1000);});
   var lfD=priceSlice.length?cotOnPrice.lfArr:cotSlice.map(function(d){return Math.round(d.lfNet/1000);});
@@ -395,9 +397,9 @@ function renderChart(){
     data:{
       labels:useLables,
       datasets:[
-        {label:'Asset Mgr',data:amD,borderColor:'#4da8f0',backgroundColor:'transparent',borderWidth:2,pointRadius:0,pointHoverRadius:4,tension:0.3,spanGaps:false},
-        {label:'Lev Funds',data:lfD,borderColor:'#f0a030',backgroundColor:'transparent',borderWidth:2,pointRadius:0,pointHoverRadius:4,tension:0.3,borderDash:[5,3],spanGaps:false},
-        {label:'Small Specs',data:smD,borderColor:'#55556a',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,pointHoverRadius:3,tension:0.3,borderDash:[2,3],spanGaps:false}
+        {label:'Asset Mgr',data:amD,borderColor:'#4da8f0',backgroundColor:'transparent',borderWidth:2,pointRadius:function(ctx){var cp=window._cotOnPrice;return cp&&cp.dotArr&&cp.dotArr[ctx.dataIndex]?3:0;},pointHoverRadius:4,tension:0.3,spanGaps:true},
+        {label:'Lev Funds',data:lfD,borderColor:'#f0a030',backgroundColor:'transparent',borderWidth:2,pointRadius:function(ctx){var cp=window._cotOnPrice;return cp&&cp.dotArr&&cp.dotArr[ctx.dataIndex]?3:0;},pointHoverRadius:4,tension:0.3,borderDash:[5,3],spanGaps:true},
+        {label:'Small Specs',data:smD,borderColor:'#55556a',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,pointHoverRadius:3,tension:0.3,borderDash:[2,3],spanGaps:true}
       ]
     },
     options:{
@@ -426,8 +428,8 @@ function fetchPrice(){
 function buildCombinedDates(weeks){
   var cotSlice=weeks>=999?allData:allData.slice(-weeks);
   if(!cotSlice.length)return{labels:[],priceSlice:[],cotSlice:cotSlice};
-  var firstDate=cotSlice[0].date;
-  var priceSlice=priceData.filter(function(d){return new Date(d.date)>=new Date(firstDate);});
+  var firstDate=dateToYMD(cotSlice[0].date);
+  var priceSlice=priceData.filter(function(d){return d.date.slice(0,10)>=firstDate;});
   var labels=priceSlice.map(function(d){
     var dt=new Date(d.date);
     return dt.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'2-digit'});
@@ -435,17 +437,39 @@ function buildCombinedDates(weeks){
   return{labels:labels,priceSlice:priceSlice,cotSlice:cotSlice};
 }
 
+function dateToYMD(d){
+  // Timezone-safe: always returns YYYY-MM-DD in local time
+  if(typeof d==='string')return d.slice(0,10);
+  var y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0');
+  return y+'-'+m+'-'+dd;
+}
+
 function buildCOTOnPriceDates(priceSlice,cotSlice){
-  var amArr=[],lfArr=[],smArr=[];
+  var amArr=[],lfArr=[],smArr=[],dotArr=[];
+  // Build map: COT date string -> row (using local date, no timezone shift)
   var cotMap={};
-  cotSlice.forEach(function(c){cotMap[c.date.toISOString().slice(0,10)]=c;});
-  priceSlice.forEach(function(p){
-    var c=cotMap[p.date]||null;
-    amArr.push(c?Math.round(c.amNet/1000):null);
-    lfArr.push(c?Math.round(c.lfNet/1000):null);
-    smArr.push(c?Math.round(c.smNet/1000):null);
+  cotSlice.forEach(function(c){
+    var key=dateToYMD(c.date);
+    cotMap[key]=c;
   });
-  return{amArr:amArr,lfArr:lfArr,smArr:smArr};
+  // Forward-fill across price dates
+  var lastAm=null,lastLf=null,lastSm=null;
+  priceSlice.forEach(function(p){
+    var key=p.date.slice(0,10);
+    var c=cotMap[key]||null;
+    if(c){
+      lastAm=Math.round(c.amNet/1000);
+      lastLf=Math.round(c.lfNet/1000);
+      lastSm=Math.round(c.smNet/1000);
+      dotArr.push(true);
+    }else{
+      dotArr.push(false);
+    }
+    amArr.push(lastAm);
+    lfArr.push(lastLf);
+    smArr.push(lastSm);
+  });
+  return{amArr:amArr,lfArr:lfArr,smArr:smArr,dotArr:dotArr};
 }
 
 function setStatus(type,msg){var bar=document.getElementById('status-bar'),spin=document.getElementById('status-spinner');bar.className='status-bar'+(type?' '+type:'');document.getElementById('status-text').textContent=msg;spin.style.display=type==='loading'?'block':'none';}
