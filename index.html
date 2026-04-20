@@ -172,7 +172,7 @@ body{min-height:100vh;max-width:640px;margin:0 auto;padding:0 0 80px}
     <div class="metric"><div class="metric-label">Open interest</div><div class="metric-value" id="oi-v"></div><div class="metric-sub" id="oi-c"></div></div>
   </div>
   <div class="section">
-    <div class="section-title">Positions nettes</div>
+    <div class="section-title">Prix NQ + EMA / Positions COT</div>
     <div class="chart-controls">
       <button class="period-btn" data-wk="13" onclick="setPeriod(13)">13 sem.</button>
       <button class="period-btn active" data-wk="26" onclick="setPeriod(26)">26 sem.</button>
@@ -180,11 +180,19 @@ body{min-height:100vh;max-width:640px;margin:0 auto;padding:0 0 80px}
       <button class="period-btn" data-wk="999" onclick="setPeriod(999)">Tout</button>
     </div>
     <div class="chart-legend">
+      <div class="legend-item"><div class="legend-line" style="background:#e8e8f0"></div>Prix NQ</div>
+      <div class="legend-item"><div class="legend-line" style="background:#f0a030"></div>EMA 18</div>
+      <div class="legend-item"><div class="legend-line" style="background:#ff5f5f"></div>EMA 40</div>
+    </div>
+    <div class="chart-wrap" style="height:200px"><canvas id="price-chart" role="img" aria-label="Prix NQ avec EMA 18 et EMA 40"></canvas></div>
+    <div style="height:1px;background:var(--border);margin:10px 0"></div>
+    <div class="chart-legend" style="margin-top:6px">
       <div class="legend-item"><div class="legend-line" style="background:#4da8f0"></div>Asset mgr</div>
-      <div class="legend-item"><div class="legend-line" style="background:#f0a030"></div>Lev funds</div>
+      <div class="legend-item"><div class="legend-line" style="background:#f0a030;border-top:2px dashed #f0a030;height:0"></div>Lev funds</div>
       <div class="legend-item"><div class="legend-line" style="background:#55556a"></div>Small specs</div>
     </div>
-    <div class="chart-wrap"><canvas id="nc" role="img" aria-label="Positions nettes COT NQ"></canvas></div>
+    <div class="chart-wrap" style="height:180px"><canvas id="nc" role="img" aria-label="Positions nettes COT NQ"></canvas></div>
+    <p id="price-note" class="note" style="margin-top:8px">Prix : donnees Yahoo Finance · mise a jour quotidienne</p>
   </div>
   <div class="section"><div class="section-title">Signaux d&#233;tect&#233;s</div><div id="sigs"></div></div>
   <div class="section"><div class="section-title">Signal open interest</div><div id="oi-sig"></div><p class="note">Confirmation prix requise (MM18/40 en daily)</p></div>
@@ -197,7 +205,7 @@ body{min-height:100vh;max-width:640px;margin:0 auto;padding:0 0 80px}
 </div>
 
 <script>
-var allData=[],chartInst=null,activePeriod=26,selectedYears=[new Date().getFullYear()];
+var allData=[],priceData=[],chartInst=null,priceChartInst=null,activePeriod=26,selectedYears=[new Date().getFullYear()];
 async function autoFetch(){
   setStatus('loading','Chargement des donnees COT...');
   setBtnsDisabled(true);
@@ -212,6 +220,7 @@ async function autoFetch(){
     setBtnsDisabled(false);
     setStatus('success',allData.length+' semaines · derniere : '+last.dateStr+' · mise a jour : '+new Date(json.updated).toLocaleDateString('fr-FR'));
     setTimeout(function(){setStatus('','');},6000);
+    fetchPrice();
     renderDash();
   }catch(e){
     setBtnsDisabled(false);
@@ -341,9 +350,102 @@ function renderHistory(){
 function setPeriod(wk){activePeriod=wk;document.querySelectorAll('.period-btn').forEach(function(b){b.classList.toggle('active',parseInt(b.dataset.wk)===wk);});renderChart();}
 
 function renderChart(){
-  var slice=activePeriod>=999?allData:allData.slice(-activePeriod);
+  var weeks=activePeriod;
+  var built=buildCombinedDates(weeks);
+  var labels=built.labels,priceSlice=built.priceSlice,cotSlice=built.cotSlice;
+
+  var sharedX={grid:{display:false},ticks:{font:{size:10},maxTicksLimit:6,maxRotation:0,color:'#55556a'},border:{display:false}};
+  var tooltipCfg={backgroundColor:'#1a1a24',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,titleColor:'#8888a0',bodyColor:'#e8e8f0'};
+
+  // Price chart
+  if(priceChartInst){priceChartInst.destroy();priceChartInst=null;}
+  if(priceSlice.length){
+    priceChartInst=new Chart(document.getElementById('price-chart'),{
+      type:'line',
+      data:{
+        labels:labels,
+        datasets:[
+          {label:'Prix NQ',data:priceSlice.map(function(d){return d.close;}),borderColor:'#e8e8f0',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,tension:0.2},
+          {label:'EMA 18',data:priceSlice.map(function(d){return d.ema18;}),borderColor:'#f0a030',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,tension:0.3},
+          {label:'EMA 40',data:priceSlice.map(function(d){return d.ema40;}),borderColor:'#ff5f5f',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,tension:0.3}
+        ]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        interaction:{mode:'index',intersect:false},
+        plugins:{legend:{display:false},tooltip:Object.assign({},tooltipCfg,{callbacks:{label:function(ctx){return ctx.dataset.label+': '+Math.round(ctx.raw);}}})},
+        scales:{
+          x:Object.assign({},sharedX),
+          y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{font:{size:10},color:'#55556a',callback:function(v){return Math.round(v/100)*100;}},border:{display:false}}
+        }
+      }
+    });
+  }
+
+  // COT chart - aligned on price dates
   if(chartInst){chartInst.destroy();chartInst=null;}
-  chartInst=new Chart(document.getElementById('nc'),{type:'line',data:{labels:slice.map(function(d){return d.dateStr;}),datasets:[{label:'Asset Mgr',data:slice.map(function(d){return Math.round(d.amNet/1000);}),borderColor:'#4da8f0',backgroundColor:'transparent',borderWidth:2,pointRadius:2,pointHoverRadius:4,tension:0.3},{label:'Lev Funds',data:slice.map(function(d){return Math.round(d.lfNet/1000);}),borderColor:'#f0a030',backgroundColor:'transparent',borderWidth:2,pointRadius:2,pointHoverRadius:4,tension:0.3,borderDash:[5,3]},{label:'Small Specs',data:slice.map(function(d){return Math.round(d.smNet/1000);}),borderColor:'#55556a',backgroundColor:'transparent',borderWidth:1.5,pointRadius:1,pointHoverRadius:3,tension:0.3,borderDash:[2,3]}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{backgroundColor:'#1a1a24',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,titleColor:'#8888a0',bodyColor:'#e8e8f0',callbacks:{label:function(ctx){return ctx.dataset.label+': '+ctx.raw+'k';}}}},scales:{x:{grid:{display:false},ticks:{font:{size:10},maxTicksLimit:6,maxRotation:0,color:'#55556a'},border:{display:false}},y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{font:{size:10},color:'#55556a',callback:function(v){return v+'k';}},border:{display:false}}}}});
+  var cotOnPrice=buildCOTOnPriceDates(priceSlice,cotSlice);
+  var useLables=priceSlice.length?labels:cotSlice.map(function(d){return d.dateStr;});
+  var amD=priceSlice.length?cotOnPrice.amArr:cotSlice.map(function(d){return Math.round(d.amNet/1000);});
+  var lfD=priceSlice.length?cotOnPrice.lfArr:cotSlice.map(function(d){return Math.round(d.lfNet/1000);});
+  var smD=priceSlice.length?cotOnPrice.smArr:cotSlice.map(function(d){return Math.round(d.smNet/1000);});
+
+  chartInst=new Chart(document.getElementById('nc'),{
+    type:'line',
+    data:{
+      labels:useLables,
+      datasets:[
+        {label:'Asset Mgr',data:amD,borderColor:'#4da8f0',backgroundColor:'transparent',borderWidth:2,pointRadius:0,pointHoverRadius:4,tension:0.3,spanGaps:false},
+        {label:'Lev Funds',data:lfD,borderColor:'#f0a030',backgroundColor:'transparent',borderWidth:2,pointRadius:0,pointHoverRadius:4,tension:0.3,borderDash:[5,3],spanGaps:false},
+        {label:'Small Specs',data:smD,borderColor:'#55556a',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,pointHoverRadius:3,tension:0.3,borderDash:[2,3],spanGaps:false}
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:Object.assign({},tooltipCfg,{callbacks:{label:function(ctx){return ctx.raw!==null?ctx.dataset.label+': '+ctx.raw+'k':'';}}}  )},
+      scales:{
+        x:Object.assign({},sharedX),
+        y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{font:{size:10},color:'#55556a',callback:function(v){return v+'k';}},border:{display:false}}
+      }
+    }
+  });
+}
+
+function fetchPrice(){
+  fetch('data/nq_price.json?t='+Date.now())
+    .then(function(r){return r.json();})
+    .then(function(json){
+      if(!json.data||!json.data.length)return;
+      priceData=json.data;
+      renderChart();
+    })
+    .catch(function(){});
+}
+
+function buildCombinedDates(weeks){
+  var cotSlice=weeks>=999?allData:allData.slice(-weeks);
+  if(!cotSlice.length)return{labels:[],priceSlice:[],cotSlice:cotSlice};
+  var firstDate=cotSlice[0].date;
+  var priceSlice=priceData.filter(function(d){return new Date(d.date)>=new Date(firstDate);});
+  var labels=priceSlice.map(function(d){
+    var dt=new Date(d.date);
+    return dt.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'2-digit'});
+  });
+  return{labels:labels,priceSlice:priceSlice,cotSlice:cotSlice};
+}
+
+function buildCOTOnPriceDates(priceSlice,cotSlice){
+  var amArr=[],lfArr=[],smArr=[];
+  var cotMap={};
+  cotSlice.forEach(function(c){cotMap[c.date.toISOString().slice(0,10)]=c;});
+  priceSlice.forEach(function(p){
+    var c=cotMap[p.date]||null;
+    amArr.push(c?Math.round(c.amNet/1000):null);
+    lfArr.push(c?Math.round(c.lfNet/1000):null);
+    smArr.push(c?Math.round(c.smNet/1000):null);
+  });
+  return{amArr:amArr,lfArr:lfArr,smArr:smArr};
 }
 
 function setStatus(type,msg){var bar=document.getElementById('status-bar'),spin=document.getElementById('status-spinner');bar.className='status-bar'+(type?' '+type:'');document.getElementById('status-text').textContent=msg;spin.style.display=type==='loading'?'block':'none';}
@@ -358,7 +460,7 @@ uz.addEventListener('dragover',function(e){e.preventDefault();uz.classList.add('
 uz.addEventListener('dragleave',function(){uz.classList.remove('drag-over');});
 uz.addEventListener('drop',function(e){e.preventDefault();uz.classList.remove('drag-over');var f=e.dataTransfer.files[0];if(!f)return;var r=new FileReader();r.onload=function(ev){loadText(ev.target.result);};r.readAsText(f);});
 
-if(loadFromStorage()&&allData.length){renderDash();}else{autoFetch();}
+if(loadFromStorage()&&allData.length){fetchPrice();renderDash();}else{autoFetch();}
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){});}
 </script>
 </body>
